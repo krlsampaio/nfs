@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f6f54">
+<title>Ponte de NFs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<style>
+  :root{
+    --bg:#f6f5f1; --card:#fff; --ink:#1c1b19; --muted:#6d6a63; --line:#e6e3dc;
+    --accent:#1f6f54; --accent-ink:#fff; --soft:#e7f1ec; --warn:#a4512a; --warn-soft:#f8ebe3;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#141413; --card:#1e1d1b; --ink:#f1efe9; --muted:#9e9a91; --line:#2f2d2a;
+      --accent:#4cb08a; --accent-ink:#0d1a14; --soft:#1d2e27; --warn:#e08a5e; --warn-soft:#33241c; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;font-size:15px;line-height:1.45}
+  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+  h1{font-size:20px;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px}
+  .tabs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px}
+  .tabs button{border:0;background:none;color:var(--muted);font:inherit;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer}
+  .tabs button.on{background:var(--ink);color:var(--bg)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+  .big{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;min-height:150px;
+    border:0;border-radius:16px;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:19px;font-weight:700;cursor:pointer}
+  .big svg{width:42px;height:42px}
+  .row{display:flex;gap:8px;margin-top:12px}
+  input[type=text]{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-family:'JetBrains Mono',monospace;font-size:13px}
+  .btn{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;padding:9px 14px;border-radius:10px;cursor:pointer;white-space:nowrap}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+  .status{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:14px;display:none}
+  .status.ok{display:block;background:var(--soft);color:var(--accent)}
+  .status.err{display:block;background:var(--warn-soft);color:var(--warn)}
+  .status.busy{display:block;background:var(--bg);color:var(--muted)}
+  .section-h{display:flex;align-items:center;justify-content:space-between;margin:22px 2px 10px;gap:8px;flex-wrap:wrap}
+  .section-h h2{font-size:15px;margin:0}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px}
+  .item.done{opacity:.55}
+  .item .main{flex:1;min-width:0}
+  .key{font-family:'JetBrains Mono',monospace;font-size:13.5px;word-break:break-all;letter-spacing:.02em}
+  .meta{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;background:var(--soft);color:var(--accent);margin-right:6px}
+  .badge.w{background:var(--warn-soft);color:var(--warn)}
+  .item.new{animation:flash 1.6s ease-out}
+  @keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
+  .empty{color:var(--muted);text-align:center;padding:36px 12px;border:1px dashed var(--line);border-radius:12px}
+  .live{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;background:#bbb}
+  .dot.on{background:#2fa36b;box-shadow:0 0 0 3px rgba(47,163,107,.2)}
+  .help{color:var(--muted);font-size:13px;margin-top:14px}
+  .help b{color:var(--ink)}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;font-size:14px;opacity:0;transition:.2s;pointer-events:none;z-index:20}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .hidden{display:none!important}
+  .ta{position:fixed;left:-9999px;top:0}
+
+  /* pareamento */
+  .pair{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+  .qr{background:#fff;padding:10px;border-radius:12px;line-height:0;border:1px solid var(--line)}
+  .qr img{width:180px;height:180px;image-rendering:pixelated}
+  .code{font-family:'JetBrains Mono',monospace;font-size:13px;background:var(--bg);padding:4px 8px;border-radius:6px;word-break:break-all}
+  .pair h3{margin:0 0 6px;font-size:16px}
+  .pair ol{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:14px}
+
+  /* scanner */
+  .cam{position:fixed;inset:0;background:#000;z-index:10;display:flex;flex-direction:column}
+  .cam video{flex:1;width:100%;object-fit:cover;min-height:0}
+  .frame{position:absolute;left:8%;right:8%;top:28%;height:30%;border:3px solid rgba(255,255,255,.85);border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);transition:border-color .15s}
+  .frame.hit{border-color:#4cdb9c}
+  .camtop{position:absolute;top:0;left:0;right:0;padding:16px;display:flex;justify-content:space-between;align-items:center;color:#fff;font-weight:600;
+    background:linear-gradient(rgba(0,0,0,.6),transparent)}
+  .camtop button{background:rgba(255,255,255,.18);color:#fff;border:0;font:inherit;font-weight:700;padding:9px 14px;border-radius:10px}
+  .cambar{position:absolute;left:0;right:0;bottom:0;padding:18px 16px 26px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.75));text-align:center}
+  .cambar .last{font-family:'JetBrains Mono',monospace;font-size:12.5px;opacity:.9;margin-top:4px;word-break:break-all}
+  .cambar .msg{font-weight:700;font-size:16px}
+  .counter{background:#4cdb9c;color:#062;border-radius:99px;padding:2px 10px;font-size:13px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Ponte de NFs</h1>
+      <div class="sub">Escaneie no celular, copie no PC.</div>
+    </div>
+    <div class="tabs">
+      <button id="tabPhone" type="button">📱 Celular</button>
+      <button id="tabPc" type="button">💻 PC</button>
+    </div>
+  </header>
+
+  <!-- ========== CELULAR ========== -->
+  <section id="viewPhone" class="hidden">
+    <!-- sem pareamento -->
+    <div class="card" id="phoneUnpaired">
+      <h3 style="margin:0 0 6px;font-size:16px">Conectar ao PC</h3>
+      <p class="sub" style="margin:0 0 14px">Abra este site no PC e leia o QR code que aparece lá.</p>
+      <button class="big" id="pairScanBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h7v-4"/></svg>
+        Ler QR code do PC
+      </button>
+      <div class="row">
+        <input id="pairCodeIn" type="text" placeholder="ou digite o código da sala" autocapitalize="off" autocomplete="off">
+        <button class="btn" id="pairCodeBtn" type="button">Conectar</button>
+      </div>
+      <div id="pairStatus" class="status"></div>
+    </div>
+
+    <!-- pareado -->
+    <div id="phonePaired" class="hidden">
+      <div class="card">
+        <button class="big" id="scanBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>
+          Escanear notas
+          <span style="font-size:13px;font-weight:500;opacity:.85">aponte para o QR code ou código de barras</span>
+        </button>
+        <div class="row">
+          <input id="manualIn" type="text" inputmode="numeric" placeholder="ou digite / cole a chave de 44 dígitos">
+          <button class="btn" id="manualBtn" type="button">Enviar</button>
+        </div>
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <button class="btn ghost" id="photoBtn" type="button" style="padding-left:0">📷 Usar foto em vez da câmera</button>
+          <button class="btn ghost" id="unpairBtn" type="button">Desconectar</button>
+        </div>
+        <input id="fileIn" type="file" accept="image/*" capture="environment" class="hidden">
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== PC: pareamento ========== -->
+  <section id="pcPair" class="hidden">
+    <div class="card">
+      <div class="pair">
+        <div class="qr" id="qrBox"></div>
+        <div style="flex:1;min-width:220px">
+          <h3>Conecte o celular</h3>
+          <ol>
+            <li>Abra a câmera do celular e aponte para este QR code.</li>
+            <li>Toque no link que aparecer.</li>
+            <li>Pronto: o que você escanear lá chega aqui.</li>
+          </ol>
+          <p class="sub" style="margin:12px 0 0">Código da sala: <span class="code" id="roomCode"></span></p>
+          <div class="row" style="margin-top:10px">
+            <button class="btn ghost" id="newRoomBtn" type="button" style="padding-left:0">Gerar nova sala</button>
+            <button class="btn ghost" id="hidePairBtn" type="button">Esconder</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== LISTA ========== -->
+  <section id="listSection">
+    <div class="section-h">
+      <h2 id="listTitle">Notas recebidas</h2>
+      <span class="live"><span class="dot" id="liveDot"></span><span id="liveTxt">—</span></span>
+    </div>
+    <div class="section-h pcOnly" style="margin-top:0">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" id="copyPending" type="button">Copiar pendentes</button>
+        <button class="btn" id="copyAll" type="button">Copiar todas</button>
+        <button class="btn ghost" id="showPairBtn" type="button">📱 Conectar celular</button>
+      </div>
+      <button class="btn ghost" id="clearDone" type="button">Limpar copiadas</button>
+    </div>
+    <div class="list" id="list"></div>
+  </section>
+</div>
+
+<!-- ========== CÂMERA ========== -->
+<div class="cam hidden" id="cam">
+  <video id="video" playsinline muted></video>
+  <div class="frame" id="frame"></div>
+  <div class="camtop">
+    <span id="camTitle">Escaneando</span>
+    <span class="counter hidden" id="camCount">0</span>
+    <button id="camClose" type="button">Fechar</button>
+  </div>
+  <div class="cambar">
+    <div class="msg" id="camMsg">Aponte para o código</div>
+    <div class="last" id="camLast"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<textarea class="ta" id="ta"></textarea>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } },
+    set(k,v){ try{ localStorage.setItem(k,v); }catch(_){} },
+    del(k){ try{ localStorage.removeItem(k); }catch(_){} }
+  };
+
+  let items = [], seen = new Set(), firstLoad = true, pollTimer = null;
+
+  // ---------- sala ----------
+  const params = new URLSearchParams(location.search);
+  const salaOk = s => /^[a-z0-9]{12,40}$/i.test(s||'');
+  function novaSala(){
+    const a = new Uint8Array(12); crypto.getRandomValues(a);
+    return Array.from(a, b => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('') + Date.now().toString(36).slice(-4);
+  }
+  let sala = null;
+  if (salaOk(params.get('sala'))) {
+    sala = params.get('sala');
+    store.set('ponte_sala', sala);
+    history.replaceState(null, '', location.pathname + '#celular');
+  } else if (salaOk(store.get('ponte_sala'))) {
+    sala = store.get('ponte_sala');
+  }
+
+  // ---------- modo ----------
+  const isMobile = matchMedia('(pointer:coarse)').matches && Math.min(screen.width, screen.height) < 820;
+  let mode = location.hash === '#pc' ? 'pc' : location.hash === '#celular' ? 'phone' : (isMobile ? 'phone' : 'pc');
+  let pairHidden = store.get('ponte_pair_hidden') === '1';
+
+  function setMode(m){
+    mode = m;
+    if (m === 'pc' && !sala) { sala = novaSala(); store.set('ponte_sala', sala); }
+    $('tabPhone').classList.toggle('on', m === 'phone');
+    $('tabPc').classList.toggle('on', m === 'pc');
+    $('viewPhone').classList.toggle('hidden', m !== 'phone');
+    $('phoneUnpaired').classList.toggle('hidden', !!sala);
+    $('phonePaired').classList.toggle('hidden', !sala);
+    $('listSection').classList.toggle('hidden', !sala);
+    $('pcPair').classList.toggle('hidden', !(m === 'pc' && sala && !pairHidden));
+    document.querySelectorAll('.pcOnly').forEach(e => e.classList.toggle('hidden', m !== 'pc'));
+    $('showPairBtn').classList.toggle('hidden', !pairHidden);
+    $('listTitle').textContent = m === 'pc' ? 'Notas recebidas' : 'Enviadas para o PC';
+    if (m === 'pc') drawQR();
+    startPolling();
+    render();
+  }
+  $('tabPhone').onclick = () => setMode('phone');
+  $('tabPc').onclick = () => setMode('pc');
+
+  function drawQR(){
+    if (!sala || !window.qrcode) return;
+    const link = location.origin + location.pathname + '?sala=' + sala;
+    const qr = qrcode(0, 'M'); qr.addData(link); qr.make();
+    $('qrBox').innerHTML = qr.createImgTag(6, 0);
+    $('roomCode').textContent = sala;
+  }
+  $('newRoomBtn').onclick = () => {
+    sala = novaSala(); store.set('ponte_sala', sala);
+    items = []; seen = new Set(); firstLoad = true;
+    setMode('pc'); toast('Nova sala criada — leia o QR de novo no celular');
+  };
+  $('hidePairBtn').onclick = () => { pairHidden = true; store.set('ponte_pair_hidden','1'); setMode(mode); };
+  $('showPairBtn').onclick = () => { pairHidden = false; store.del('ponte_pair_hidden'); setMode(mode); };
+
+  function conectar(s){
+    if (!salaOk(s)) return false;
+    sala = s; store.set('ponte_sala', s);
+    items = []; seen = new Set(); firstLoad = true;
+    setMode('phone'); toast('Conectado ao PC ✓');
+    return true;
+  }
+  $('pairCodeBtn').onclick = () => {
+    const v = $('pairCodeIn').value.trim().replace(/.*sala=/,'');
+    if (!conectar(v)) { const e=$('pairStatus'); e.className='status err'; e.textContent='Código inválido.'; }
+  };
+  $('unpairBtn').onclick = () => {
+    sala = null; store.del('ponte_sala'); items = []; stopPolling(); setMode('phone');
+  };
+
+  // ---------- util ----------
+  function toast(t){ const e=$('toast'); e.textContent=t; e.classList.add('show'); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove('show'),1900); }
+  function status(kind, t){ const e=$('status'); e.className='status '+kind; e.textContent=t; }
+  const fmtKey = k => k.replace(/(\d{4})(?=\d)/g,'$1 ');
+  function dvOk(k){
+    if(!/^\d{44}$/.test(k)) return false;
+    let s=0,w=2; for(let i=42;i>=0;i--){ s+=(+k[i])*w; w=w===9?2:w+1; }
+    const r=s%11, dv=(r<2)?0:11-r; return dv===+k[43];
+  }
+  function info(k){
+    if(!/^\d{44}$/.test(k)) return null;
+    const mod=k.slice(20,22);
+    return {
+      tipo: mod==='55'?'NF-e':mod==='65'?'NFC-e':mod==='57'?'CT-e':'Mod '+mod,
+      mes: k.slice(4,6)+'/20'+k.slice(2,4),
+      num: String(+k.slice(25,34)),
+      cnpj: k.slice(6,20).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5')
+    };
+  }
+  const extractKey = t => { const m = String(t||'').replace(/\s/g,'').match(/\d{44}/); return m ? m[0] : null; };
+  function ago(ts){
+    const s=Math.round((Date.now()-ts)/1000);
+    if(s<60) return 'agora'; if(s<3600) return Math.floor(s/60)+' min atrás';
+    return new Date(ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }
+  const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  async function copyText(t){
+    try{ await navigator.clipboard.writeText(t); return true; }
+    catch(_){ const ta=$('ta'); ta.value=t; ta.select(); try{ return document.execCommand('copy'); }catch(e){ return false; } }
+  }
+  function beep(){
+    try{
+      const C = window.AudioContext || window.webkitAudioContext; beep.ctx = beep.ctx || new C();
+      const o = beep.ctx.createOscillator(), g = beep.ctx.createGain();
+      o.frequency.value = 1200; g.gain.value = .08; o.connect(g); g.connect(beep.ctx.destination);
+      o.start(); o.stop(beep.ctx.currentTime + .09);
+    }catch(_){}
+    try{ navigator.vibrate && navigator.vibrate(70); }catch(_){}
+  }
+
+  // ---------- API ----------
+  async function api(method, body, query=''){
+    const r = await fetch('/api/notas' + query, {
+      method, headers: body ? {'Content-Type':'application/json'} : undefined,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.erro || ('Erro ' + r.status));
+    return j;
+  }
+  function setLive(on, txt){ $('liveDot').classList.toggle('on',on); $('liveTxt').textContent=txt; }
+
+  async function refresh(){
+    if(!sala) return;
+    try{
+      const { notas } = await api('GET', null, '?sala=' + sala);
+      let fresh = 0;
+      const old = new Map(items.map(i=>[i.id,i]));
+      items = notas.map(n => {
+        if(!firstLoad && !seen.has(n.id)){ n._new = true; fresh++; }
+        seen.add(n.id);
+        return n;
+      });
+      const changed = fresh || notas.length !== old.size || notas.some(n => { const o=old.get(n.id); return !o || o.copiada!==n.copiada; });
+      if(fresh && mode==='pc'){
+        toast(fresh===1 ? 'Nova nota chegou' : `${fresh} notas novas`);
+        if(!pairHidden && items.length){ pairHidden = true; store.set('ponte_pair_hidden','1'); setMode(mode); }
+      }
+      firstLoad = false;
+      setLive(true, 'conectado');
+      if(changed) render();
+    }catch(e){
+      setLive(false, e.message.length < 60 ? e.message : 'sem conexão');
+    }
+  }
+  function startPolling(){
+    stopPolling(); if(!sala) return;
+    refresh();
+    pollTimer = setInterval(() => { if(!document.hidden) refresh(); }, mode==='pc' ? 2000 : 6000);
+  }
+  function stopPolling(){ if(pollTimer) clearInterval(pollTimer); pollTimer = null; }
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) refresh(); });
+
+  // ---------- render ----------
+  function render(){
+    const L=$('list');
+    if(!items.length){
+      L.innerHTML = '<div class="empty">'+(mode==='pc'
+        ? 'Nenhuma nota ainda.<br>Escaneie pelo celular e ela aparece aqui.'
+        : 'Nada enviado ainda.')+'</div>';
+      return;
+    }
+    L.innerHTML = items.map(it=>{
+      const k = it.chave, inf = info(k||''), valid = k && dvOk(k);
+      const meta = inf
+        ? `<span class="badge${valid?'':' w'}">${inf.tipo}${valid?'':' · DV inválido'}</span>nº ${inf.num} · ${inf.mes} · CNPJ ${inf.cnpj}`
+        : `<span class="badge w">sem chave</span>texto lido`;
+      return `<div class="item ${it.copiada?'done':''} ${it._new?'new':''}" data-id="${esc(it.id)}">
+        <div class="main" style="cursor:pointer" data-act="copy">
+          <div class="key">${esc(k?fmtKey(k):(it.raw||'').slice(0,160))}</div>
+          <div class="meta">${meta} · ${ago(it.criadoEm||0)}${it.copiada?' · ✓ copiada':''}</div>
+        </div>
+        ${mode==='pc'?'<button class="btn" data-act="copy" type="button">Copiar</button>':''}
+        <button class="btn ghost" data-act="del" type="button" title="Excluir">✕</button>
+      </div>`;
+    }).join('');
+    items.forEach(i=>delete i._new);
+  }
+
+  async function marcar(ids){
+    ids = ids.filter(id => { const it = items.find(i=>i.id===id); return it && !it.copiada; });
+    if(!ids.length) return;
+    items.forEach(i => { if(ids.includes(i.id)) i.copiada = true; }); render();
+    try{ await api('PATCH', { sala, ids, copiada:true }); }catch(_){}
+  }
+  async function apagar(ids){
+    if(!ids.length) return;
+    items = items.filter(i => !ids.includes(i.id)); render();
+    try{ await api('DELETE', null, `?sala=${sala}&ids=${ids.join(',')}`); }catch(e){ toast('Erro ao excluir'); refresh(); }
+  }
+
+  $('list').addEventListener('click', async e=>{
+    const a = e.target.closest('[data-act]'); if(!a) return;
+    const id = a.closest('.item').dataset.id;
+    const it = items.find(x=>x.id===id); if(!it) return;
+    if(a.dataset.act==='copy'){
+      const ok = await copyText(it.chave || it.raw || '');
+      toast(ok?'Chave copiada':'Não consegui copiar');
+      if(ok) marcar([id]);
+    } else if(a.dataset.act==='del') apagar([id]);
+  });
+  async function copyMany(list){
+    if(!list.length){ toast('Nada para copiar'); return; }
+    const ok = await copyText(list.map(i=>i.chave||i.raw).join('\n'));
+    toast(ok ? `${list.length} chave${list.length>1?'s':''} copiada${list.length>1?'s':''}` : 'Não consegui copiar');
+    if(ok) marcar(list.map(i=>i.id));
+  }
+  $('copyPending').onclick = () => copyMany(items.filter(i=>!i.copiada).slice().reverse());
+  $('copyAll').onclick = () => copyMany(items.slice().reverse());
+  $('clearDone').onclick = () => {
+    const done = items.filter(i=>i.copiada).map(i=>i.id);
+    if(!done.length){ toast('Nenhuma copiada'); return; }
+    apagar(done); toast(`${done.length} removida${done.length>1?'s':''}`);
+  };
+
+  // ---------- envio ----------
+  async function send(raw){
+    try{
+      const r = await api('POST', { sala, raw: String(raw) });
+      if(r.duplicada) return { dup:true };
+      refresh();
+      return { ok:true, chave:r.nota.chave };
+    }catch(e){ return { err:e.message }; }
+  }
+  function msgEnvio(r){
+    if(r.dup) return ['ok','Essa nota já tinha sido enviada ✓'];
+    if(r.err) return ['err', r.err];
+    const inf = info(r.chave||'');
+    if(!r.chave) return ['ok','Enviado ✓ (não achei chave de 44 dígitos, mandei o texto lido)'];
+    return ['ok', `Enviada ✓ ${inf?inf.tipo+' nº '+inf.num:''}${dvOk(r.chave)?'':' (atenção: dígito verificador não confere)'}`];
+  }
+  $('manualBtn').onclick = async () => {
+    const k = extractKey($('manualIn').value);
+    if(!k){ status('err','A chave precisa ter 44 dígitos.'); return; }
+    status('busy','Enviando…'); const r = await send(k); status(...msgEnvio(r));
+    if(r.ok || r.dup) $('manualIn').value='';
+  };
+  $('manualIn').addEventListener('keydown', e=>{ if(e.key==='Enter') $('manualBtn').click(); });
+
+  // ---------- decodificação ----------
+  let bd = null;
+  try{ if('BarcodeDetector' in window) bd = new BarcodeDetector({formats:['qr_code','code_128','itf','data_matrix']}); }catch(_){ bd = null; }
+  let zx = null;
+  function zxReader(){
+    if(zx || !window.ZXing) return zx;
+    const Z = window.ZXing, hints = new Map();
+    hints.set(Z.DecodeHintType.TRY_HARDER, true);
+    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.QR_CODE, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.ITF, Z.BarcodeFormat.DATA_MATRIX]);
+    zx = new Z.MultiFormatReader(); zx.setHints(hints); return zx;
+  }
+  function zxDecode(canvas){
+    const Z = window.ZXing, r = zxReader(); if(!r) return null;
+    const src = new Z.HTMLCanvasElementLuminanceSource(canvas);
+    for(const bin of [new Z.HybridBinarizer(src), new Z.GlobalHistogramBinarizer(src)]){
+      try{ const res = r.decode(new Z.BinaryBitmap(bin)); if(res && res.getText()) return res.getText(); }catch(_){}
+    }
+    return null;
+  }
+  const pick = vals => (vals && vals.length) ? (vals.find(v=>extractKey(v)) || vals[0]) : null;
+  function drawTo(src, sw, sh, maxSide, rot, crop){
+    const c = document.createElement('canvas');
+    let sx=0, sy=0, cw=sw, ch=sh;
+    if(crop){ cw = sw*crop.w; ch = sh*crop.h; sx = sw*crop.x; sy = sh*crop.y; }
+    const s = Math.min(1, maxSide/Math.max(cw,ch)), w = Math.round(cw*s), h = Math.round(ch*s);
+    c.width = rot ? h : w; c.height = rot ? w : h;
+    const x = c.getContext('2d', {willReadFrequently:true});
+    if(rot){ x.translate(h,0); x.rotate(Math.PI/2); }
+    x.drawImage(src, sx, sy, cw, ch, 0, 0, w, h);
+    return c;
+  }
+
+  // ---------- câmera ao vivo ----------
+  let stream = null, scanning = false, camPurpose = 'nf', lastSent = new Map(), camCount = 0, busy = false;
+
+  async function openCam(purpose){
+    camPurpose = purpose; camCount = 0;
+    $('camCount').classList.add('hidden');
+    $('camTitle').textContent = purpose === 'pair' ? 'Leia o QR do PC' : 'Escaneando notas';
+    $('camMsg').textContent = purpose === 'pair' ? 'Aponte para o QR code na tela do PC' : 'Aponte para o QR code ou código de barras';
+    $('camLast').textContent = '';
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} }, audio:false });
+    }catch(e){
+      const msg = 'Não consegui abrir a câmera. Permita o acesso nas configurações do navegador ou use a opção de foto.';
+      if(purpose==='pair'){ const s=$('pairStatus'); s.className='status err'; s.textContent=msg; } else status('err', msg);
+      return;
+    }
+    const v = $('video'); v.srcObject = stream; await v.play().catch(()=>{});
+    try{
+      const track = stream.getVideoTracks()[0], caps = track.getCapabilities ? track.getCapabilities() : {};
+      if(caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
+    }catch(_){}
+    $('cam').classList.remove('hidden');
+    scanning = true; loop();
+  }
+  function closeCam(){
+    scanning = false;
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+    $('cam').classList.add('hidden');
+    if(camPurpose==='nf' && camCount) status('ok', `${camCount} nota${camCount>1?'s':''} enviada${camCount>1?'s':''} nesta leitura ✓`);
+  }
+  $('camClose').onclick = closeCam;
+
+  let frameN = 0;
+  async function loop(){
+    if(!scanning) return;
+    const v = $('video');
+    if(v.readyState >= 2 && !busy){
+      busy = true;
+      try{
+        const txt = await decodeFrame(v);
+        if(txt) await onRead(txt);
+      }catch(_){}
+      busy = false;
+    }
+    setTimeout(loop, bd ? 120 : 220);
+  }
+  async function decodeFrame(v){
+    const w = v.videoWidth, h = v.videoHeight; if(!w || !h) return null;
+    if(bd){
+      try{ const r = await bd.detect(v); const p = pick(r.map(x=>x.rawValue)); if(p) return p; }catch(_){}
+      return null;
+    }
+    frameN++;
+    // alterna: faixa central (código de barras), quadro inteiro, faixa girada
+    const mode = frameN % 3;
+    if(mode === 0) return zxDecode(drawTo(v, w, h, 1280, false, {x:0, y:.22, w:1, h:.42}));
+    if(mode === 1) return zxDecode(drawTo(v, w, h, 900, false));
+    return zxDecode(drawTo(v, w, h, 1280, true, {x:.25, y:0, w:.5, h:1}));
+  }
+  async function onRead(txt){
+    if(camPurpose === 'pair'){
+      const m = String(txt).match(/[?&]sala=([a-z0-9]{12,40})/i);
+      const s = m ? m[1] : (salaOk(txt) ? txt : null);
+      if(s){ beep(); closeCam(); conectar(s); }
+      else $('camMsg').textContent = 'Esse não é o QR do PC. Abra o site no computador.';
+      return;
+    }
+    const id = extractKey(txt) || txt;
+    const now = Date.now();
+    if(lastSent.has(id) && now - lastSent.get(id) < 8000) return; // ignora repetido logo em seguida
+    lastSent.set(id, now);
+    beep();
+    $('frame').classList.add('hit'); setTimeout(()=>$('frame').classList.remove('hit'), 500);
+    $('camMsg').textContent = 'Enviando…';
+    const r = await send(txt);
+    const [kind, msg] = msgEnvio(r);
+    $('camMsg').textContent = msg + (kind==='ok' ? ' — pode ler a próxima' : '');
+    const k = extractKey(txt); $('camLast').textContent = k ? fmtKey(k) : String(txt).slice(0,80);
+    if(r.ok){ camCount++; $('camCount').textContent = camCount; $('camCount').classList.remove('hidden'); }
+  }
+
+  $('scanBtn').onclick = () => {
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ $('fileIn').click(); return; }
+    openCam('nf');
+  };
+  $('pairScanBtn').onclick = () => {
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      const s=$('pairStatus'); s.className='status err'; s.textContent='Este navegador não abre a câmera. Use a câmera do celular para ler o QR, ou digite o código.'; return;
+    }
+    openCam('pair');
+  };
+
+  // ---------- foto (alternativa) ----------
+  $('photoBtn').onclick = () => $('fileIn').click();
+  $('fileIn').onchange = async e => {
+    const f = e.target.files && e.target.files[0]; e.target.value=''; if(!f) return;
+    status('busy','Lendo código…');
+    try{
+      const u = URL.createObjectURL(f);
+      const img = await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=u; });
+      let txt = null;
+      const W = img.naturalWidth, H = img.naturalHeight;
+      if(bd){ for(const s of [2000,1200]){ try{ txt = pick((await bd.detect(drawTo(img,W,H,s,false))).map(x=>x.rawValue)); }catch(_){} if(txt) break; } }
+      if(!txt){
+        for(const [s,rot] of [[1600,false],[1000,false],[2400,false],[1600,true],[1000,true]]){
+          await new Promise(r=>setTimeout(r,0));
+          txt = zxDecode(drawTo(img,W,H,s,rot)); if(txt) break;
+        }
+      }
+      URL.revokeObjectURL(u);
+      if(!txt){ status('err','Não encontrei QR code nem código de barras. Tente mais perto, com mais luz, ou digite a chave.'); return; }
+      status('busy','Enviando…'); status(...msgEnvio(await send(txt)));
+    }catch(_){ status('err','Erro ao ler a imagem.'); }
+  };
+
+  setInterval(() => { if(items.length) render(); }, 60000);
+  setMode(mode);
+})();
+</script>
+</body>
+</html>
